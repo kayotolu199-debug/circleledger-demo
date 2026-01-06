@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CircleLedger — Private & Free</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #fafafa; color: #1a1a1a; }
+    h1 { font-size: 1.5em; margin-bottom: 20px; color: #2d5d2d; }
+    .screen { display: none; }
+    .active { display: block; }
+    input, select, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; }
+    button { background: #2d5d2d; color: white; font-weight: bold; border: none; cursor: pointer; }
+    button:hover { opacity: 0.9; }
+    .member-list, .payment-list { background: #f0f7f0; padding: 12px; border-radius: 8px; margin: 10px 0; }
+    .footer { margin-top: 30px; font-size: 0.85em; color: #666; }
+    .footer a { color: #2d5d2d; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>CircleLedger</h1>
+  <p style="font-size:0.9em; color:#555;">Free. Private. No email. No tracking.</p>
+
+  <!-- Screen: Create Circle -->
+  <div id="screen1" class="screen active">
+    <h2>Start Your Circle</h2>
+    <input type="text" id="circleName" placeholder="Circle name (e.g., Sister Circle)" />
+    <input type="number" id="contribution" placeholder="Monthly contribution (£)" min="1" />
+    <input type="number" id="memberCount" placeholder="Number of members" min="2" max="30" />
+    <button onclick="createCircle()">Next: Add Members</button>
+  </div>
+
+  <!-- Screen: Add Members -->
+  <div id="screen2" class="screen">
+    <h2>Add Members (First Names Only)</h2>
+    <input type="text" id="memberName" placeholder="Member name" />
+    <button onclick="addMember()">Add Member</button>
+    <div id="memberList"></div>
+    <button onclick="showScreen('screen3')" style="margin-top:20px;">Done</button>
+  </div>
+
+  <!-- Screen: Log Payment -->
+  <div id="screen3" class="screen">
+    <h2>Log a Payment</h2>
+    <select id="payingMember"></select>
+    <select id="paymentMethod">
+      <option value="Cash">Cash</option>
+      <option value="Monzo">Monzo</option>
+      <option value="Cash App">Cash App</option>
+      <option value="Bank Transfer">Bank Transfer</option>
+    </select>
+    <button onclick="logPayment()">Record Payment</button>
+    <div id="paymentList"></div>
+    <button onclick="generateProof()" style="margin-top:20px; background:#1a471a;">Save as PDF</button>
+  </div>
+
+  <!-- Proof Screen (for PDF) -->
+  <div id="proofScreen" style="display:none;">
+    <h2>CircleLedger — Proof of Participation</h2>
+    <p><strong>Circle:</strong> <span id="proofCircle"></span></p>
+    <p><strong>Contribution:</strong> £<span id="proofContribution"></span>/month</p>
+    <h3>Payment Log</h3>
+    <div id="proofPayments"></div>
+    <p style="margin-top:30px; font-size:0.9em;">This is a self-issued record for personal use. No central authority verified this data.</p>
+  </div>
+
+  <div class="footer">
+    <p>CircleLedger is free, open, and private. <a href="#" onclick="showScreen('screen1'); clearData(); return false;">Start New Circle</a></p>
+    <p>© Toll Frame • Not a financial service</p>
+  </div>
+
+  <script>
+    let circle = { name: '', contribution: 0, memberCount: 0 };
+    let members = [];
+    let payments = [];
+
+    function createCircle() {
+      const name = document.getElementById('circleName').value;
+      const contrib = parseFloat(document.getElementById('contribution').value);
+      const count = parseInt(document.getElementById('memberCount').value);
+      if (!name || !contrib || !count) {
+        alert('Please fill all fields');
+        return;
+      }
+      circle = { name, contribution: contrib, memberCount: count };
+      showScreen('screen2');
+    }
+
+    function addMember() {
+      const name = document.getElementById('memberName').value.trim();
+      if (!name) return;
+      members.push(name);
+      document.getElementById('memberName').value = '';
+      updateMemberList();
+    }
+
+    function updateMemberList() {
+      const list = document.getElementById('memberList');
+      list.innerHTML = members.map(m => `<div class="member-list">${m}</div>`).join('');
+      // Update payment dropdown
+      const sel = document.getElementById('payingMember');
+      sel.innerHTML = members.map(m => `<option value="${m}">${m}</option>`).join('');
+    }
+
+    function logPayment() {
+      const member = document.getElementById('payingMember').value;
+      const method = document.getElementById('paymentMethod').value;
+      if (!member) return;
+      const payment = { member, method, date: new Date().toLocaleDateString() };
+      payments.push(payment);
+      updatePaymentList();
+    }
+
+    function updatePaymentList() {
+      const list = document.getElementById('paymentList');
+      list.innerHTML = payments.map(p => 
+        `<div class="payment-list">${p.member} — ${p.method} (${p.date})</div>`
+      ).join('');
+    }
+
+    function generateProof() {
+      // Fill proof screen
+      document.getElementById('proofCircle').textContent = circle.name;
+      document.getElementById('proofContribution').textContent = circle.contribution;
+      
+      let proofHTML = '';
+      payments.forEach(p => {
+        proofHTML += `<p>${p.member} • ${p.method} • ${p.date}</p>`;
+      });
+      document.getElementById('proofPayments').innerHTML = proofHTML || '<p>No payments logged.</p>';
+      
+      // Show proof screen, hide others
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('proofScreen').style.display = 'block';
+      
+      // Trigger print (save as PDF)
+      setTimeout(() => {
+        window.print();
+        // Return to log screen after
+        document.getElementById('proofScreen').style.display = 'none';
+        showScreen('screen3');
+      }, 500);
+    }
+
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function clearData() {
+      circle = { name: '', contribution: 0, memberCount: 0 };
+      members = [];
+      payments = [];
+      document.getElementById('circleName').value = '';
+      document.getElementById('contribution').value = '';
+      document.getElementById('memberCount').value = '';
+      document.getElementById('memberList').innerHTML = '';
+      document.getElementById('paymentList').innerHTML = '';
+    }
+
+    // Hide proof on print
+    window.addEventListener('beforeprint', () => {
+      document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
+      document.getElementById('proofScreen').style.display = 'block';
+    });
+    window.addEventListener('afterprint', () => {
+      document.getElementById('proofScreen').style.display = 'none';
+      document.querySelectorAll('.screen').forEach(s => s.style.display = 'block');
+    });
+  </script>
+</body>
+</html>
