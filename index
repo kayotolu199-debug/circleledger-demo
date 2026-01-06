@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CircleLedger — Private & Free</title>
+  <title>CircleLedger — Private & Verified</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #fafafa; color: #1a1a1a; }
     h1 { font-size: 1.5em; margin-bottom: 20px; color: #2d5d2d; }
@@ -13,13 +13,15 @@
     button { background: #2d5d2d; color: white; font-weight: bold; border: none; cursor: pointer; }
     button:hover { opacity: 0.9; }
     .member-list, .payment-list { background: #f0f7f0; padding: 12px; border-radius: 8px; margin: 10px 0; }
+    .verification-code { background: #e8f5e8; padding: 12px; border-radius: 8px; margin: 15px 0; font-family: monospace; font-size: 0.9em; }
     .footer { margin-top: 30px; font-size: 0.85em; color: #666; }
     .footer a { color: #2d5d2d; text-decoration: underline; }
+    #proofScreen { padding: 20px; background: white; }
   </style>
 </head>
 <body>
   <h1>CircleLedger</h1>
-  <p style="font-size:0.9em; color:#555;">Free. Private. No email. No tracking.</p>
+  <p style="font-size:0.9em; color:#555;">Free. Private. Tamper-evident.</p>
 
   <!-- Screen: Create Circle -->
   <div id="screen1" class="screen active">
@@ -51,7 +53,7 @@
     </select>
     <button onclick="logPayment()">Record Payment</button>
     <div id="paymentList"></div>
-    <button onclick="generateProof()" style="margin-top:20px; background:#1a471a;">Save as PDF</button>
+    <button onclick="generateProof()" style="margin-top:20px; background:#1a471a;">Save as PDF + Get Verification Code</button>
   </div>
 
   <!-- Proof Screen (for PDF) -->
@@ -61,7 +63,16 @@
     <p><strong>Contribution:</strong> £<span id="proofContribution"></span>/month</p>
     <h3>Payment Log</h3>
     <div id="proofPayments"></div>
-    <p style="margin-top:30px; font-size:0.9em;">This is a self-issued record for personal use. No central authority verified this data.</p>
+    <div class="verification-code">
+      <strong>Verification Code:</strong><br/>
+      <span id="proofHash">Generating...</span>
+    </div>
+    <p style="margin-top:20px; font-size:0.85em; color:#555;">
+      To verify this document hasn’t been altered:<br/>
+      1. Go to <a href="https://emn178.github.io/online-tools/sha256.html" target="_blank">this free SHA-256 tool</a><br/>
+      2. Paste the full text above (including this code)<br/>
+      3. Check if the hash matches.
+    </p>
   </div>
 
   <div class="footer">
@@ -69,6 +80,9 @@
     <p>© Toll Frame • Not a financial service</p>
   </div>
 
+  <!-- SHA-256 Library (lightweight) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-sha256/0.9.0/sha256.min.js"></script>
+  
   <script>
     let circle = { name: '', contribution: 0, memberCount: 0 };
     let members = [];
@@ -97,7 +111,6 @@
     function updateMemberList() {
       const list = document.getElementById('memberList');
       list.innerHTML = members.map(m => `<div class="member-list">${m}</div>`).join('');
-      // Update payment dropdown
       const sel = document.getElementById('payingMember');
       sel.innerHTML = members.map(m => `<option value="${m}">${m}</option>`).join('');
     }
@@ -119,7 +132,6 @@
     }
 
     function generateProof() {
-      // Fill proof screen
       document.getElementById('proofCircle').textContent = circle.name;
       document.getElementById('proofContribution').textContent = circle.contribution;
       
@@ -129,17 +141,30 @@
       });
       document.getElementById('proofPayments').innerHTML = proofHTML || '<p>No payments logged.</p>';
       
-      // Show proof screen, hide others
+      // Generate content for hashing
+      const fullContent = 
+        `CircleLedger — Proof of Participation\n` +
+        `Circle: ${circle.name}\n` +
+        `Contribution: £${circle.contribution}/month\n` +
+        `Payment Log:\n` +
+        payments.map(p => `${p.member} • ${p.method} • ${p.date}`).join('\n') +
+        `\n-- End of Record --`;
+      
+      // Generate SHA-256 hash
+      const hash = sha256(fullContent);
+      const shortHash = hash.substring(0, 8).toUpperCase();
+      document.getElementById('proofHash').textContent = shortHash;
+      
+      // Show proof screen
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
       document.getElementById('proofScreen').style.display = 'block';
       
-      // Trigger print (save as PDF)
+      // Print after delay
       setTimeout(() => {
         window.print();
-        // Return to log screen after
         document.getElementById('proofScreen').style.display = 'none';
         showScreen('screen3');
-      }, 500);
+      }, 600);
     }
 
     function showScreen(id) {
@@ -158,7 +183,7 @@
       document.getElementById('paymentList').innerHTML = '';
     }
 
-    // Hide proof on print
+    // Print handling
     window.addEventListener('beforeprint', () => {
       document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
       document.getElementById('proofScreen').style.display = 'block';
