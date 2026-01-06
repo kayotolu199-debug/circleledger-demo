@@ -13,10 +13,15 @@
     button { background: #2d5d2d; color: white; font-weight: bold; border: none; cursor: pointer; }
     button:hover { opacity: 0.9; }
     .member-list, .payment-list { background: #f0f7f0; padding: 12px; border-radius: 8px; margin: 10px 0; }
-    .verification-code { background: #e8f5e8; padding: 12px; border-radius: 8px; margin: 15px 0; font-family: monospace; font-size: 0.9em; }
+    .verification-code { background: #e8f5e8; padding: 12px; border-radius: 8px; margin: 15px 0; font-family: monospace; font-size: 0.9em; word-break: break-all; }
     .footer { margin-top: 30px; font-size: 0.85em; color: #666; }
     .footer a { color: #2d5d2d; text-decoration: underline; }
-    #proofScreen { padding: 20px; background: white; }
+    #proofScreen { padding: 20px; background: white; display: none; }
+    @media print {
+      body * { display: none; }
+      #proofScreen { display: block !important; }
+      .no-print { display: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -53,11 +58,11 @@
     </select>
     <button onclick="logPayment()">Record Payment</button>
     <div id="paymentList"></div>
-    <button onclick="generateProof()" style="margin-top:20px; background:#1a471a;">Save as PDF + Get Verification Code</button>
+    <button onclick="generateProof()" style="margin-top:20px; background:#1a471a;">Save as PDF</button>
   </div>
 
-  <!-- Proof Screen (for PDF) -->
-  <div id="proofScreen" style="display:none;">
+  <!-- Proof Screen (for Print/PDF) -->
+  <div id="proofScreen">
     <h2>CircleLedger — Proof of Participation</h2>
     <p><strong>Circle:</strong> <span id="proofCircle"></span></p>
     <p><strong>Contribution:</strong> £<span id="proofContribution"></span>/month</p>
@@ -65,35 +70,111 @@
     <div id="proofPayments"></div>
     <div class="verification-code">
       <strong>Verification Code:</strong><br/>
-      <span id="proofHash">Generating...</span>
+      <span id="proofHash">—</span>
     </div>
-    <p style="margin-top:20px; font-size:0.85em; color:#555;">
-      To verify this document hasn’t been altered:<br/>
-      1. Go to <a href="https://emn178.github.io/online-tools/sha256.html" target="_blank">this free SHA-256 tool</a><br/>
-      2. Paste the full text above (including this code)<br/>
-      3. Check if the hash matches.
+    <p class="no-print" style="margin-top:20px; font-size:0.85em; color:#555;">
+      ✅ To save as PDF:<br/>
+      - Tap the share button → “Print” → “Save as PDF” (iOS)<br/>
+      - Tap ⋮ → “Print” → “Save as PDF” (Android)
     </p>
   </div>
 
-  <div class="footer">
+  <div class="footer no-print">
     <p>CircleLedger is free, open, and private. <a href="#" onclick="showScreen('screen1'); clearData(); return false;">Start New Circle</a></p>
     <p>© Toll Frame • Not a financial service</p>
   </div>
 
-  <!-- SHA-256 Library (lightweight) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-sha256/0.9.0/sha256.min.js"></script>
-  
   <script>
+    // ✅ EMBEDDED SHA-256 (no external dependency)
+    const sha256 = (ascii) => {
+      function rightRotate(value, amount) {
+        return (value>>>amount) | (value<<(32 - amount));
+      }
+      let mathPow = Math.pow;
+      let maxWord = mathPow(2, 32);
+      let lengthProperty = 'length';
+      let i, j, // Used in loops
+        hash = [], // Final hash
+        stringToHash = '', // String to hash
+        unicode, // Unicode value
+        bitwiseC, // Bitwise operation
+        processedMessage, // Processed message
+        workingVariables, // Working variables
+        is224 = false, // Is this 224-bit?
+        is256 = true, // Is this 256-bit?
+        // Initial hash
+        H = [
+          0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+          0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+        ];
+      stringToHash = ascii;
+      // Pre-processing
+      unicode = [];
+      for (i = 0; i < stringToHash[lengthProperty]; i++) {
+        unicode[i] = stringToHash.charCodeAt(i);
+      }
+      // Convert to words
+      let bitCount = unicode[lengthProperty] * 8;
+      unicode.push(128);
+      while ((unicode[lengthProperty] % 64) !== 56) {
+        unicode.push(0);
+      }
+      for (i = 0; i < 8; i++) {
+        unicode.push(Math.floor(bitCount / mathPow(256, 7 - i)) % 256);
+      }
+      processedMessage = [];
+      for (i = 0; i < unicode[lengthProperty] / 4; i++) {
+        processedMessage[i] = (unicode[i * 4] << 24) | (unicode[i * 4 + 1] << 16) |
+                              (unicode[i * 4 + 2] << 8) | unicode[i * 4 + 3];
+      }
+      // Process message in 512-bit chunks
+      for (i = 0; i < processedMessage[lengthProperty]; i += 16) {
+        workingVariables = H.slice(0);
+        for (j = 0; j < 64; j++) {
+          let CH = (workingVariables[4] & workingVariables[5]) ^ (~workingVariables[4] & workingVariables[6]);
+          let MAJ = (workingVariables[0] & workingVariables[1]) ^ (workingVariables[0] & workingVariables[2]) ^ (workingVariables[1] & workingVariables[2]);
+          let sigma0 = rightRotate(workingVariables[0], 2) ^ rightRotate(workingVariables[0], 13) ^ rightRotate(workingVariables[0], 22);
+          let sigma1 = rightRotate(workingVariables[4], 6) ^ rightRotate(workingVariables[4], 11) ^ rightRotate(workingVariables[4], 25);
+          let W = (j < 16) ? processedMessage[i + j] :
+            ((rightRotate(W[1], 17) ^ rightRotate(W[1], 19) ^ (W[1] >>> 10)) + W[2] +
+             (rightRotate(W[11], 7) ^ rightRotate(W[11], 18) ^ (W[11] >>> 3)) + W[12]) & 0xFFFFFFFF;
+          let T1 = (workingVariables[7] + sigma1 + CH + [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2][j] + T1) & 0xFFFFFFFF;
+          let T2 = (sigma0 + MAJ) & 0xFFFFFFFF;
+          workingVariables = [
+            (T1 + T2) & 0xFFFFFFFF,
+            workingVariables[0],
+            workingVariables[1],
+            workingVariables[2],
+            (workingVariables[3] + T1) & 0xFFFFFFFF,
+            workingVariables[4],
+            workingVariables[5],
+            workingVariables[6]
+          ];
+        }
+        for (j = 0; j < 8; j++) {
+          H[j] = (H[j] + workingVariables[j]) & 0xFFFFFFFF;
+        }
+      }
+      let finalHash = '';
+      for (i = 0; i < 8; i++) {
+        for (j = 3; j >= 0; j--) {
+          finalHash += ((H[i] >> (j * 8)) & 255).toString(16).padStart(2, '0');
+        }
+      }
+      return finalHash;
+    };
+
+    // App state
     let circle = { name: '', contribution: 0, memberCount: 0 };
     let members = [];
     let payments = [];
 
     function createCircle() {
-      const name = document.getElementById('circleName').value;
+      const name = document.getElementById('circleName').value.trim();
       const contrib = parseFloat(document.getElementById('contribution').value);
       const count = parseInt(document.getElementById('memberCount').value);
-      if (!name || !contrib || !count) {
-        alert('Please fill all fields');
+      if (!name || isNaN(contrib) || isNaN(count) || contrib <= 0 || count < 2) {
+        alert('Please enter valid details.');
         return;
       }
       circle = { name, contribution: contrib, memberCount: count };
@@ -103,6 +184,10 @@
     function addMember() {
       const name = document.getElementById('memberName').value.trim();
       if (!name) return;
+      if (members.includes(name)) {
+        alert('Member already added.');
+        return;
+      }
       members.push(name);
       document.getElementById('memberName').value = '';
       updateMemberList();
@@ -118,9 +203,17 @@
     function logPayment() {
       const member = document.getElementById('payingMember').value;
       const method = document.getElementById('paymentMethod').value;
-      if (!member) return;
-      const payment = { member, method, date: new Date().toLocaleDateString() };
-      payments.push(payment);
+      if (!member) { alert('Select a member'); return; }
+      
+      // Prevent duplicate today's payment for same member
+      const today = new Date().toLocaleDateString();
+      const existing = payments.find(p => p.member === member && p.date === today);
+      if (existing) {
+        alert(`${member} already paid today.`);
+        return;
+      }
+      
+      payments.push({ member, method, date: today });
       updatePaymentList();
     }
 
@@ -132,6 +225,11 @@
     }
 
     function generateProof() {
+      if (payments.length === 0) {
+        alert('Log at least one payment first.');
+        return;
+      }
+      
       document.getElementById('proofCircle').textContent = circle.name;
       document.getElementById('proofContribution').textContent = circle.contribution;
       
@@ -139,10 +237,10 @@
       payments.forEach(p => {
         proofHTML += `<p>${p.member} • ${p.method} • ${p.date}</p>`;
       });
-      document.getElementById('proofPayments').innerHTML = proofHTML || '<p>No payments logged.</p>';
+      document.getElementById('proofPayments').innerHTML = proofHTML;
       
-      // Generate content for hashing
-      const fullContent = 
+      // Generate hash from plain text
+      const fullText = 
         `CircleLedger — Proof of Participation\n` +
         `Circle: ${circle.name}\n` +
         `Contribution: £${circle.contribution}/month\n` +
@@ -150,26 +248,19 @@
         payments.map(p => `${p.member} • ${p.method} • ${p.date}`).join('\n') +
         `\n-- End of Record --`;
       
-      // Generate SHA-256 hash
-      const hash = sha256(fullContent);
-      const shortHash = hash.substring(0, 8).toUpperCase();
-      document.getElementById('proofHash').textContent = shortHash;
+      const hash = sha256(fullText);
+      document.getElementById('proofHash').textContent = hash.substring(0, 8).toUpperCase();
       
-      // Show proof screen
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      // Switch to proof screen
+      showScreen(null); // hide all app screens
       document.getElementById('proofScreen').style.display = 'block';
-      
-      // Print after delay
-      setTimeout(() => {
-        window.print();
-        document.getElementById('proofScreen').style.display = 'none';
-        showScreen('screen3');
-      }, 600);
     }
 
-    function showScreen(id) {
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
+    function showScreen(screenId) {
+      document.querySelectorAll('.screen').forEach(s => {
+        s.style.display = (s.id === screenId) ? 'block' : 'none';
+      });
+      document.getElementById('proofScreen').style.display = 'none';
     }
 
     function clearData() {
@@ -181,17 +272,11 @@
       document.getElementById('memberCount').value = '';
       document.getElementById('memberList').innerHTML = '';
       document.getElementById('paymentList').innerHTML = '';
+      showScreen('screen1');
     }
 
-    // Print handling
-    window.addEventListener('beforeprint', () => {
-      document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
-      document.getElementById('proofScreen').style.display = 'block';
-    });
-    window.addEventListener('afterprint', () => {
-      document.getElementById('proofScreen').style.display = 'none';
-      document.querySelectorAll('.screen').forEach(s => s.style.display = 'block');
-    });
+    // Initialize
+    showScreen('screen1');
   </script>
 </body>
 </html>
