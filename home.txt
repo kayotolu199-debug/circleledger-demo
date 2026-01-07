@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CircleLedger</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; background: #f5f9ff; }
+    .screen { display: none; }
+    .active { display: block; }
+    input, select, button { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; }
+    button { background: #0056b3; color: white; border: none; font-weight: bold; }
+    .record { background: #eef6ff; padding: 10px; margin: 10px 0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+  <h1>CircleLedger</h1>
+
+  <!-- Screen 1: Create Circle -->
+  <div id="screen1" class="screen active">
+    <h2>Start Your Circle</h2>
+    <input type="text" id="name" placeholder="Circle name">
+    <input type="number" id="amount" placeholder="Contribution (£)">
+    <input type="number" id="count" placeholder="Number of members" min="2" max="30">
+    <button onclick="startCircle()">Next</button>
+  </div>
+
+  <!-- Screen 2: Add Members -->
+  <div id="screen2" class="screen">
+    <h2>Add Members</h2>
+    <input type="text" id="memberInput" placeholder="Member name">
+    <button onclick="addMember()">Add</button>
+    <div id="memberList"></div>
+    <button onclick="goToPayments()">Done</button>
+  </div>
+
+  <!-- Screen 3: Log Payments -->
+  <div id="screen3" class="screen">
+    <h2>Log Payments</h2>
+    <select id="memberSelect"></select>
+    <button onclick="logPayment()">Record Payment</button>
+    <div id="paymentList"></div>
+    <button onclick="window.print()">Save as PDF</button>
+  </div>
+
+  <script>
+    let circle = { name: '', amount: 0 };
+    let members = [];
+    let payments = [];
+
+    function startCircle() {
+      const name = document.getElementById('name').value;
+      const amount = parseFloat(document.getElementById('amount').value);
+      const count = parseInt(document.getElementById('count').value);
+      if (name && amount > 0 && count >= 2 && count <= 30) {
+        circle = { name, amount };
+        document.getElementById('name').value = '';
+        document.getElementById('amount').value = '';
+        document.getElementById('count').value = '';
+        showScreen('screen2');
+      } else {
+        alert('Please enter valid details.');
+      }
+    }
+
+    function addMember() {
+      const input = document.getElementById('memberInput');
+      const name = input.value.trim();
+      if (name && !members.includes(name) && members.length < 30) {
+        members.push(name);
+        input.value = '';
+        updateMemberList();
+      }
+    }
+
+    function updateMemberList() {
+      const list = document.getElementById('memberList');
+      list.innerHTML = members.map(m => `<div class="record">${m}</div>`).join('');
+      updateMemberSelect();
+    }
+
+    function updateMemberSelect() {
+      const select = document.getElementById('memberSelect');
+      select.innerHTML = members.map(m => `<option>${m}</option>`).join('');
+    }
+
+    function goToPayments() {
+      if (members.length === 0) {
+        alert('Add at least one member.');
+        return;
+      }
+      showScreen('screen3');
+    }
+
+    function logPayment() {
+      const select = document.getElementById('memberSelect');
+      const member = select.value;
+      if (!member) return;
+      const today = new Date().toLocaleDateString();
+      payments.push({ member, date: today });
+      updatePaymentList();
+    }
+
+    function updatePaymentList() {
+      const list = document.getElementById('paymentList');
+      list.innerHTML = payments.map(p => 
+        `<div class="record">${p.member} — ${p.date}</div>`
+      ).join('');
+    }
+
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(el => {
+        el.classList.remove('active');
+      });
+      document.getElementById(id).classList.add('active');
+    }
+  </script>
+
+</body>
+</html>
